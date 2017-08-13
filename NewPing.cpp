@@ -40,6 +40,10 @@ NewPing::NewPing(uint8_t trigger_pin, uint8_t echo_pin, unsigned int max_cm_dist
 #if ONE_PIN_ENABLED != true && DO_BITWISE == true
 	*_triggerMode |= _triggerBit; // Set trigger pin to output.
 #endif
+
+#if TIMER_ENABLED == true
+    intFuncPayload = 0;
+#endif
 }
 
 
@@ -198,11 +202,11 @@ void NewPing::set_max_distance(unsigned int max_cm_distance) {
 // Timer interrupt ping methods (won't work with non-AVR, ATmega128 and all ATtiny microcontrollers)
 // ---------------------------------------------------------------------------
 
-void NewPing::ping_timer(void (*userFunc)(void), unsigned int max_cm_distance) {
+void NewPing::ping_timer(void (*userFunc)(void *), void * payload, unsigned int max_cm_distance) {
 	if (max_cm_distance > 0) set_max_distance(max_cm_distance); // Call function to set a new max sensor distance.
-
+    
 	if (!ping_trigger()) return;         // Trigger a ping, if it returns false, return without starting the echo timer.
-	timer_us(ECHO_TIMER_FREQ, userFunc); // Set ping echo timer check every ECHO_TIMER_FREQ uS.
+	timer_us(ECHO_TIMER_FREQ, userFunc, payload); // Set ping echo timer check every ECHO_TIMER_FREQ uS.
 }
 
 
@@ -225,6 +229,9 @@ boolean NewPing::check_timer() {
 	return false; // Return false because there's no ping echo yet.
 }
 
+void * NewPing::get__payload() {
+    return intFuncPayload;
+}
 
 // ---------------------------------------------------------------------------
 // Timer2/Timer4 interrupt methods (can be used for non-ultrasonic needs)
@@ -240,8 +247,9 @@ volatile unsigned long _ms_cnt;
 #endif
 
 
-void NewPing::timer_us(unsigned int frequency, void (*userFunc)(void)) {
+void NewPing::timer_us(unsigned int frequency, void (*userFunc)(void *), void *payload) {
 	intFunc = userFunc; // User's function to call when there's a timer event.
+    intFuncPayload = payload;
 	timer_setup();      // Configure the timer interrupt.
 
 #if defined (__AVR_ATmega32U4__) // Use Timer4 for ATmega32U4 (Teensy/Leonardo).
@@ -256,9 +264,10 @@ void NewPing::timer_us(unsigned int frequency, void (*userFunc)(void)) {
 }
 
 
-void NewPing::timer_ms(unsigned long frequency, void (*userFunc)(void)) {
+void NewPing::timer_ms(unsigned long frequency, void (*userFunc)(void *), void * payload) {
 	intFunc = NewPing::timer_ms_cntdwn;  // Timer events are sent here once every ms till user's frequency is reached.
 	intFunc2 = userFunc;                 // User's function to call when user's frequency is reached.
+    intFuncPayload = payload;
 	_ms_cnt = _ms_cnt_reset = frequency; // Current ms counter and reset value.
 	timer_setup();                       // Configure the timer interrupt.
 
@@ -313,26 +322,26 @@ void NewPing::timer_setup() {
 }
 
 
-void NewPing::timer_ms_cntdwn() {
+void NewPing::timer_ms_cntdwn(void * dummy) {
 	if (!_ms_cnt--) {            // Count down till we reach zero.
-		intFunc2();              // Scheduled time reached, run the main timer event function.
+		intFunc2(intFuncPayload);              // Scheduled time reached, run the main timer event function.
 		_ms_cnt = _ms_cnt_reset; // Reset the ms timer.
 	}
 }
 
 #if defined (__AVR_ATmega32U4__) // Use Timer4 for ATmega32U4 (Teensy/Leonardo).
 ISR(TIMER4_OVF_vect) {
-	intFunc(); // Call wrapped function.
+	intFunc(intFuncPayload); // Call wrapped function.
 }
 #elif defined (__AVR_ATmega8__) || defined (__AVR_ATmega16__) || defined (__AVR_ATmega32__) || defined (__AVR_ATmega8535__) // Alternate timer commands for certain microcontrollers.
 ISR(TIMER2_COMP_vect) {
-	intFunc(); // Call wrapped function.
+	intFunc(intFuncPayload); // Call wrapped function.
 }
 #elif defined (__arm__)
 // Do nothing...
 #else
 ISR(TIMER2_COMPA_vect) {
-	intFunc(); // Call wrapped function.
+	intFunc(intFuncPayload); // Call wrapped function.
 }
 #endif
 

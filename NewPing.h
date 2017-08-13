@@ -211,13 +211,14 @@ class NewPing {
 		static unsigned int convert_cm(unsigned int echoTime);
 		static unsigned int convert_in(unsigned int echoTime);
 #if TIMER_ENABLED == true
-		void ping_timer(void (*userFunc)(void), unsigned int max_cm_distance = 0);
+		void ping_timer(void (*userFunc)(void *), void *payload, unsigned int max_cm_distance = 0);
 		boolean check_timer();
+        void *get_payload();
 		unsigned long ping_result;
-		static void timer_us(unsigned int frequency, void (*userFunc)(void));
-		static void timer_ms(unsigned long frequency, void (*userFunc)(void));
+		static void timer_us(unsigned int frequency, void (*userFunc)(void *), void * payload = 0);
+		static void timer_ms(unsigned long frequency, void (*userFunc)(void *), void * payload = 0);
 		static void timer_stop();
-#endif
+        #endif
 	private:
 		boolean ping_trigger();
 		void set_max_distance(unsigned int max_cm_distance);
@@ -226,6 +227,7 @@ class NewPing {
 		boolean ping_wait_timer();
 		static void timer_setup();
 		static void timer_ms_cntdwn();
+        void * intFuncPayload;
 #endif
 #if DO_BITWISE == true
 		uint8_t _triggerBit;
